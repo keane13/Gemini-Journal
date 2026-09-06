@@ -67,12 +67,52 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 1. Fetch user's recent entries (past 14 days)
-    const entriesUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${user.uid}/interactions?pageSize=20`;
-    const res = await fetch(entriesUrl, { headers: { Authorization: `Bearer ${token}` } });
+    /**
+     * 1. Fetch the user's recent entries.
+     *
+     * `entries` is the authoritative store: it is what the server writes on every
+     * reflection. `interactions` is the older client-side store, still written by the
+     * browser, and this route used to read ONLY that -- which is why it failed for an
+     * account whose entries were all written server-side. Read the real store first and
+     * fall back, so both old and new accounts work.
+     */
+    const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${user.uid}`;
+
+    async function loadFrom(collection: string) {
+      const r = await fetch(`${base}/${collection}?pageSize=20`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { ok: r.ok, status: r.status, body: await r.text(), collection };
+    }
+
+    let res = await loadFrom('entries');
+    let docs: any[] = [];
+
+    if (res.ok) {
+      try {
+        docs = JSON.parse(res.body).documents ?? [];
+      } catch {
+        docs = [];
+      }
+    }
+
+    // Nothing in the authoritative store: try the legacy one before giving up.
+    if (docs.length === 0) {
+      const legacy = await loadFrom('interactions');
+      if (legacy.ok) {
+        try {
+          docs = JSON.parse(legacy.body).documents ?? [];
+        } catch {
+          docs = [];
+        }
+      }
+      // Only surface an error if BOTH reads were refused.
+      if (!res.ok && !legacy.ok) res = legacy;
+      else if (!res.ok) res = { ...legacy, ok: true };
+    }
 
     if (!res.ok) {
-      const errText = await res.text();
+      const errText = res.body;
       console.error('Firestore API error:', errText);
 
       /**
@@ -113,8 +153,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const data = await res.json();
-    const documents = data.documents || [];
+    const documents = docs;
 
     if (documents.length === 0) {
       return NextResponse.json({
