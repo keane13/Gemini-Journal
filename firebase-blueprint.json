@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile, configuration preferences, and usage quotas.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastActiveAt": { "type": "string", "format": "date-time" },
+        "preferences": {
+          "type": "object",
+          "description": "User preferences including theme, defaultMode, privacyMode, locale"
+        },
+        "quota": {
+          "type": "object",
+          "description": "Daily token usage quota tracking"
+        }
+      },
+      "required": ["createdAt", "lastActiveAt"]
+    },
+    "Entry": {
+      "title": "Entry",
+      "description": "A top-level journal reflection session containing multi-turn dialogue with Gemini.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200 },
+        "mode": { "type": "string", "enum": ["reflection", "brainstorming", "summary", "deep_dive", "recall"] },
+        "status": { "type": "string", "enum": ["draft", "active", "archived"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "messageCount": { "type": "number" },
+        "tags": { "type": "array" },
+        "moodScore": { "type": "number" },
+        "themes": { "type": "array" },
+        "summary": { "type": "object" }
+      },
+      "required": ["title", "mode", "status", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An individual turn in a journal reflection entry.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "content": { "type": "string", "maxLength": 16000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "modelId": { "type": "string", "maxLength": 64 },
+        "promptVersion": { "type": "string", "maxLength": 32 },
+        "tokenCount": { "type": "number" },
+        "redactionApplied": { "type": "boolean" },
+        "safetyBlocked": { "type": "boolean" },
+        "redactionStats": { "type": "object" }
+      },
+      "required": ["role", "content", "createdAt"]
+    },
+    "Chunk": {
+      "title": "Chunk",
+      "description": "Text chunk and vector embedding for grounded semantic recall.",
+      "type": "object",
+      "properties": {
+        "entryId": { "type": "string", "maxLength": 128 },
+        "text": { "type": "string", "maxLength": 4000 },
+        "embedding": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["entryId", "text", "createdAt"]
+    },
+    "Insight": {
+      "title": "Insight",
+      "description": "Longitudinal insight document generated weekly for trends and self-discovery.",
+      "type": "object",
+      "properties": {
+        "periodStart": { "type": "string", "format": "date-time" },
+        "periodEnd": { "type": "string", "format": "date-time" },
+        "moodTrend": { "type": "array" },
+        "recurringThemes": { "type": "array" },
+        "blockers": { "type": "array" },
+        "oneQuestion": { "type": "string", "maxLength": 500 },
+        "entryRefs": { "type": "array" },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["periodStart", "periodEnd", "oneQuestion", "generatedAt"]
+    },
+    "AuditEvent": {
+      "title": "AuditEvent",
+      "description": "Cryptographic security audit record containing IP and user agent hashes without content.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "maxLength": 64 },
+        "at": { "type": "string", "format": "date-time" },
+        "ipHash": { "type": "string", "maxLength": 64 },
+        "userAgentHash": { "type": "string", "maxLength": 64 },
+        "outcome": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["type", "at", "outcome"]
+    },
+    "Commitment": {
+      "title": "Commitment",
+      "description": "Self-stated first-person commitment extracted from a journal reflection.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "maxLength": 500 },
+        "sourceEntryId": { "type": "string", "maxLength": 128 },
+        "sourceMessageId": { "type": "string", "maxLength": 128 },
+        "statedAt": { "type": "string", "format": "date-time" },
+        "dueHint": { "type": ["string", "null"], "maxLength": 100 },
+        "status": { "type": "string", "enum": ["open", "done", "released"] },
+        "resurfacedCount": { "type": "number" },
+        "lastResurfacedAt": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "required": ["text", "sourceEntryId", "statedAt", "status", "resurfacedCount"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile, quotas, and preferences."
+    },
+    "/users/{uid}/entries/{entryId}": {
+      "schema": { "$ref": "#/entities/Entry" },
+      "description": "User journal entries."
+    },
+    "/users/{uid}/entries/{entryId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Turns within an entry."
+    },
+    "/users/{uid}/commitments/{commitmentId}": {
+      "schema": { "$ref": "#/entities/Commitment" },
+      "description": "User extracted self-stated commitments."
+    },
+    "/users/{uid}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/Chunk" },
+      "description": "Embedded text chunks for grounded recall."
+    },
+    "/users/{uid}/insights/{periodId}": {
+      "schema": { "$ref": "#/entities/Insight" },
+      "description": "Longitudinal weekly insights."
+    },
+    "/users/{uid}/audit/{eventId}": {
+      "schema": { "$ref": "#/entities/AuditEvent" },
+      "description": "Audit trail of security-relevant user events."
+    }
+  }
+}

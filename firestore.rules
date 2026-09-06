@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default global deny-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions for zero-trust validation
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Root user document
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+
+      // Journal Entries subcollection
+      match /entries/{entryId} {
+        allow read, delete: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(entryId)
+          && request.resource.data.title is string && request.resource.data.title.size() <= 200
+          && request.resource.data.mode is string
+          && request.resource.data.status is string
+          && (request.resource.data.moodScore == null || (request.resource.data.moodScore is number && request.resource.data.moodScore >= -1.0 && request.resource.data.moodScore <= 1.0));
+
+        allow update: if isOwner(userId) && isValidId(entryId)
+          && request.resource.data.title is string && request.resource.data.title.size() <= 200
+          && request.resource.data.mode is string
+          && request.resource.data.status is string
+          && (request.resource.data.moodScore == null || (request.resource.data.moodScore is number && request.resource.data.moodScore >= -1.0 && request.resource.data.moodScore <= 1.0));
+
+        // Message turns inside an entry
+        match /messages/{messageId} {
+          allow read, delete: if isOwner(userId);
+
+          allow create: if isOwner(userId) && isValidId(messageId)
+            && request.resource.data.role in ['user', 'model']
+            && request.resource.data.content is string && request.resource.data.content.size() <= 32000;
+
+          allow update: if isOwner(userId) && isValidId(messageId)
+            && request.resource.data.role in ['user', 'model']
+            && request.resource.data.content is string && request.resource.data.content.size() <= 32000;
+        }
+      }
+
+      // Semantic Recall Chunks subcollection
+      match /chunks/{chunkId} {
+        allow read, delete: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(chunkId)
+          && request.resource.data.entryId is string && request.resource.data.entryId.size() <= 128
+          && request.resource.data.text is string && request.resource.data.text.size() <= 8000;
+
+        allow update: if isOwner(userId) && isValidId(chunkId)
+          && request.resource.data.entryId is string && request.resource.data.entryId.size() <= 128
+          && request.resource.data.text is string && request.resource.data.text.size() <= 8000;
+      }
+
+      // Longitudinal Weekly Insights subcollection
+      match /insights/{periodId} {
+        allow read, delete: if isOwner(userId);
+
+        allow create, update: if isOwner(userId) && isValidId(periodId)
+          && request.resource.data.oneQuestion is string && request.resource.data.oneQuestion.size() <= 1000;
+      }
+
+      // Commitments subcollection (Self-stated first-person commitments)
+      match /commitments/{commitmentId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(commitmentId)
+          && request.resource.data.text is string && request.resource.data.text.size() <= 1000
+          && request.resource.data.status in ['open', 'done', 'released'];
+      }
+
+      // Cryptographic Security Audit subcollection (Append-only)
+      match /audit/{eventId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(eventId)
+          && request.resource.data.type is string
+          && request.resource.data.outcome is string;
+        allow update, delete: if false; // Immutable audit log
+      }
+
+      // Backward-compatible interactions subcollection
+      match /interactions/{interactionId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}

@@ -1,0 +1,144 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  /* Nightstand Palette (Default: Calm Low-Glare Dark) */
+  --color-base: #141821;
+  --color-surface: #1C212B;
+  --color-surface-elevated: #222834;
+  --color-divider: #2A303C;
+  --color-text-primary: #E9E5DD;
+  --color-text-secondary: #8D96A5;
+  --color-accent: #0EA5E9;
+  --color-accent-dim: rgba(14, 165, 233, 0.15);
+  --color-accent-gradient: linear-gradient(135deg, #2563EB 0%, #06B6D4 50%, #10B981 100%);
+  --color-alert: #C9A961;
+  --color-alert-dim: rgba(201, 169, 97, 0.15);
+}
+
+[data-theme="daylight"] {
+  /* Daylight Palette (Paper Calm) */
+  --color-base: #F4F5F7;
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #F9FAFB;
+  --color-divider: #E5E7EB;
+  --color-text-primary: #1F2937;
+  --color-text-secondary: #6B7280;
+  --color-accent: #0284C7;
+  --color-accent-dim: rgba(2, 132, 199, 0.12);
+  --color-accent-gradient: linear-gradient(135deg, #2563EB 0%, #06B6D4 50%, #10B981 100%);
+  --color-alert: #B58D3D;
+  --color-alert-dim: rgba(181, 141, 61, 0.12);
+}
+
+body {
+  background-color: var(--color-base);
+  color: var(--color-text-primary);
+  margin: 0;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Humanist journal body reading surface */
+.journal-canvas {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  font-size: 18px;
+  line-height: 1.75;
+  max-width: 66ch;
+}
+
+/* Clean hairline scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-divider);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* Redaction highlight token */
+.redaction-token {
+  background-color: var(--color-alert-dim);
+  color: var(--color-alert);
+  border: 1px solid rgba(201, 169, 97, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* Reset textarea borders completely so no box border appears */
+textarea, textarea:focus, textarea:active {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Subtle focus ring */
+*:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Blue-to-Green Gradient Utility Classes */
+.bg-gradient-blue-green {
+  background: linear-gradient(135deg, #2563EB 0%, #06B6D4 50%, #10B981 100%);
+}
+
+.bg-gradient-blue-green:hover {
+  background: linear-gradient(135deg, #1D4ED8 0%, #0891B2 50%, #059669 100%);
+}
+
+.text-gradient-blue-green {
+  background: linear-gradient(135deg, #38BDF8 0%, #2DD4BF 50%, #34D399 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Gemini Signature Shimmer Animation */
+@keyframes geminiShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.gemini-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 0%,
+    var(--color-surface-elevated) 35%,
+    var(--color-divider) 50%,
+    var(--color-surface-elevated) 65%,
+    var(--color-surface) 100%
+  );
+  background-size: 250% 100%;
+  animation: geminiShimmer 2.2s infinite ease-in-out;
+}
+
+@keyframes geminiGlow {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.gemini-sparkle-glow {
+  animation: geminiGlow 3s infinite ease-in-out;
+}
