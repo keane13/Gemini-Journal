@@ -68,11 +68,29 @@ function isValidIndonesianNPWP(npwp: string): boolean {
 /**
  * Runs the Privacy Shield redaction pipeline on an input text.
  */
+export interface PrivacyShieldOptions {
+  /**
+   * FEATURE 9: exact place labels attached to the entry that must be masked as
+   * [LOCATION_n] before egress. Supplied by the caller only when the user has NOT
+   * enabled location context for reflections. Masking here (rather than by stripping the
+   * text upstream) means location appears in the Egress Ledger like any other entity.
+   */
+  maskLocations?: string[];
+}
+
 export function runPrivacyShield(
   input: string,
-  mode: PrivacyMode = 'standard'
+  mode: PrivacyMode = 'standard',
+  options: PrivacyShieldOptions = {}
 ): RedactionResult {
-  if (mode === 'off' || !input) {
+  // Location masking is a user-data-protection decision, not a PII-heuristic one, so it
+  // applies even in 'off' mode: if the user has not opted into location context, the
+  // label must not reach the model regardless of the privacy-mode setting.
+  const locationLabels = (options.maskLocations ?? []).filter(
+    (label) => typeof label === 'string' && label.trim().length > 0
+  );
+
+  if (!input || (mode === 'off' && locationLabels.length === 0)) {
     return {
       redactedText: input,
       redactionApplied: false,
@@ -109,13 +127,18 @@ export function runPrivacyShield(
     category: string;
   }> = [];
 
+  // Shared cursor for every exec() loop below. Declared outside the mode guard so the
+  // location pass -- which runs even in 'off' mode -- can use it too.
+  let match: RegExpExecArray | null;
+
   // =========================================================================
   // STAGE 1: DETERMINISTIC DETECTORS
+  // Skipped entirely in 'off' mode, where only explicit location masking applies.
   // =========================================================================
+  if (mode !== 'off') {
 
   // 1. Credit Cards with Luhn Check
   const ccRegex = /\b(?:\d[ -]*?){13,19}\b/g;
-  let match: RegExpExecArray | null;
   while ((match = ccRegex.exec(text)) !== null) {
     const raw = match[0];
     const digitsOnly = raw.replace(/\D/g, '');
@@ -222,6 +245,23 @@ export function runPrivacyShield(
       original: match[0],
       category: 'ADDRESS',
     });
+  }
+
+  } // end deterministic detectors
+
+  // 9. FEATURE 9: Explicit location labels attached to this entry.
+  //    Matched literally (not heuristically) because the caller knows the exact label.
+  for (const label of locationLabels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const locationRegex = new RegExp(escaped, 'gi');
+    while ((match = locationRegex.exec(text)) !== null) {
+      detectedSpans.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        original: match[0],
+        category: 'LOCATION',
+      });
+    }
   }
 
   // =========================================================================

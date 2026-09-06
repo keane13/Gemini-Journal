@@ -22,6 +22,7 @@ import { MODES_REGISTRY, wrapUntrustedData } from '@/lib/server/modes';
 import { generateEmbedding, cosineSimilarity, ScoredChunk } from '@/lib/server/embeddings';
 import firebaseConfig from '@/firebase-applet-config.json';
 import { createAuditRecord } from '@/lib/server/audit';
+import { runPrivacyShield, rehydrateModelOutput, PrivacyMode } from '@/lib/server/redaction';
 import { persistDocument } from '@/lib/server/firestore-rest';
 
 const projectId = firebaseConfig.projectId;
@@ -56,8 +57,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Recall query cannot be empty.' }, { status: 400 });
     }
 
-    // 3. Generate query embedding
-    const queryVector = await generateEmbedding(query);
+    /**
+     * The recall query is user-written text that leaves this server twice: once to the
+     * embedding endpoint and once to Gemini. It must therefore cross the SAME Privacy
+     * Shield boundary as a journal entry.
+     *
+     * This was previously missing: a query like "what did I discuss with budi@x.com?"
+     * reached both models verbatim, contradicting the egress guarantee the rest of the
+     * system upholds.
+     */
+    const privacyMode: PrivacyMode = body?.privacyMode || 'standard';
+    const shieldedQuery = runPrivacyShield(query, privacyMode);
+
+    // 3. Generate query embedding from the redacted form.
+    const queryVector = await generateEmbedding(shieldedQuery.redactedText);
 
     // 4. Retrieve user's own chunks from Firestore REST API
     // Structurally scoped to users/{uid}/chunks - cannot access any other user
@@ -118,7 +131,7 @@ export async function POST(req: NextRequest) {
       )
       .join('\n\n');
 
-    const promptText = `User Question: "${query}"\n\nRetrieved Historical Journal Excerpts:\n${wrapUntrustedData(contextBlocks, 'historical_chunks')}\n\nPlease answer the user question grounded solely on these excerpts, citing [Entry: <entryId>] inline.`;
+    const promptText = `User Question: "${shieldedQuery.redactedText}"\n\nRetrieved Historical Journal Excerpts:\n${wrapUntrustedData(contextBlocks, 'historical_chunks')}\n\nPlease answer the user question grounded solely on these excerpts, citing [Entry: <entryId>] inline.`;
 
     const apiKey = await getGeminiApiKey();
     const ai = new GoogleGenAI({ apiKey });
@@ -133,7 +146,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const answer = response?.text || 'Unable to generate recall response.';
+    // Rehydrated in server memory so the user reads their own terms back; the map is
+    // discarded with the request and never persisted.
+    const rawAnswer = response?.text || 'Unable to generate recall response.';
+    const answer = rehydrateModelOutput(rawAnswer, shieldedQuery.ephemeralMap);
 
     // Audit Event
     if (token) {
@@ -143,6 +159,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       answer,
+      // What the client should persist: redacted, like every other write path.
+      canonicalQuery: shieldedQuery.redactedText,
+      canonicalAnswer: rawAnswer,
+      redactionDetails: {
+        redactionApplied: shieldedQuery.redactionApplied,
+        categoryCounts: shieldedQuery.categoryCounts,
+        maskedSpans: shieldedQuery.maskedSpans,
+        redactedPayload: shieldedQuery.redactedText,
+        originalLength: query.length,
+        redactedLength: shieldedQuery.redactedText.length,
+      },
       grounded: true,
       citations: topChunks.map((c) => ({
         entryId: c.entryId,

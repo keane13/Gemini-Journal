@@ -83,7 +83,7 @@ export const CommitmentsModal: React.FC<CommitmentsModalProps> = ({
             onClick={() => setFilter('open')}
             className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
               filter === 'open'
-                ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-primary)] shadow-sm'
+                ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-primary)]'
                 : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
             }`}
           >
@@ -94,18 +94,18 @@ export const CommitmentsModal: React.FC<CommitmentsModalProps> = ({
             onClick={() => setFilter('done')}
             className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
               filter === 'done'
-                ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-primary)] shadow-sm'
+                ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-primary)]'
                 : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
             }`}
           >
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            <CheckCircle2 className="h-3.5 w-3.5 text-[var(--system)]" />
             Done ({commitments.filter((c) => c.status === 'done').length})
           </button>
           <button
             onClick={() => setFilter('released')}
             className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors ${
               filter === 'released'
-                ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-primary)] shadow-sm'
+                ? 'bg-[var(--color-surface)] font-medium text-[var(--color-text-primary)]'
                 : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
             }`}
           >
@@ -133,7 +133,7 @@ export const CommitmentsModal: React.FC<CommitmentsModalProps> = ({
               return (
                 <div
                   key={item.id}
-                  className="rounded-lg border-0 bg-[var(--color-surface)] p-4 shadow-sm transition-all hover:bg-[var(--color-surface-elevated)]"
+                  className="rounded-lg border-0 bg-[var(--color-surface)] p-4 transition-all hover:bg-[var(--color-surface-elevated)]"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <p className="text-sm text-[var(--color-text-primary)] leading-relaxed flex-1">
@@ -145,7 +145,7 @@ export const CommitmentsModal: React.FC<CommitmentsModalProps> = ({
                           <button
                             disabled={updatingId === item.id}
                             onClick={() => handleStatusChange(item.id, 'done')}
-                            className="inline-flex items-center gap-1 rounded bg-gradient-to-r from-blue-600 to-emerald-500 px-2.5 py-1 text-xs text-white hover:opacity-90 transition-opacity disabled:opacity-50 font-medium shadow-sm"
+                            className="inline-flex items-center gap-1 rounded bg-[var(--paper)] px-2.5 py-1 text-xs text-[var(--ink-base)] hover:opacity-90 transition-opacity disabled:opacity-50 font-medium"
                           >
                             <Check className="h-3.5 w-3.5 text-white" />
                             Done

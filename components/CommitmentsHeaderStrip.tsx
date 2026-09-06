@@ -108,7 +108,7 @@ export const CommitmentsHeaderStrip: React.FC<CommitmentsHeaderStripProps> = ({
             <div
               key={item.id}
               id={`commitment-item-${item.id}`}
-              className="flex flex-col gap-2 rounded-md border-0 bg-[var(--color-surface)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between shadow-sm"
+              className="flex flex-col gap-2 rounded-md border-0 bg-[var(--color-surface)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-start gap-2.5 min-w-0 flex-1">
                 <Sparkles className="h-3.5 w-3.5 flex-shrink-0 text-cyan-400 mt-0.5 opacity-80" />
@@ -145,7 +145,7 @@ export const CommitmentsHeaderStrip: React.FC<CommitmentsHeaderStripProps> = ({
                   id={`btn-done-${item.id}`}
                   disabled={updatingId === item.id}
                   onClick={() => handleStatusClick(item.id, 'done')}
-                  className="inline-flex items-center gap-1 rounded bg-gradient-to-r from-blue-600 to-emerald-500 px-2 py-1 text-[11px] text-white hover:opacity-90 transition-opacity disabled:opacity-50 font-medium shadow-sm"
+                  className="inline-flex items-center gap-1 rounded bg-[var(--paper)] px-2 py-1 text-[11px] text-[var(--ink-base)] hover:opacity-90 transition-opacity disabled:opacity-50 font-medium"
                   title="Mark this commitment completed"
                 >
                   <Check className="h-3 w-3 text-white" />

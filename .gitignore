@@ -5,3 +5,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local deployment config (contains environment-specific values)
+service.yaml
+tsconfig.tsbuildinfo
+.claude/

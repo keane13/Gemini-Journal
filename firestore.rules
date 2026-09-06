@@ -20,6 +20,15 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    // FEATURE 7 (Blind Admin Console).
+    // The admin role is deliberately NOT referenced by any rule under /users/{userId}/**.
+    // Its only read privilege is over precomputed, count-only fleet aggregates. This is
+    // the mechanism that makes the console structurally blind to journal content, and it
+    // is what /api/admin/prove exercises live against the real backend.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
     // Root user document
     match /users/{userId} {
       allow read: if isOwner(userId);
@@ -93,10 +102,128 @@ service cloud.firestore {
         allow update, delete: if false; // Immutable audit log
       }
 
+      // FEATURE 9: Per-user preference documents (e.g. location precision and whether
+      // location may be used as reflection context). Owner-only, like everything else
+      // under /users -- the admin role confers no access here either.
+      match /settings/{settingId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(settingId)
+          && (!('preciseLocation' in request.resource.data)
+              || request.resource.data.preciseLocation is bool)
+          && (!('locationContextForReflections' in request.resource.data)
+              || request.resource.data.locationContextForReflections is bool);
+      }
+
       // Backward-compatible interactions subcollection
       match /interactions/{interactionId} {
         allow read, write: if isOwner(userId);
       }
+    }
+
+    // =====================================================================
+    // FEATURE 7: Blind Admin Console surfaces
+    // =====================================================================
+
+    // Fleet operational aggregates: precomputed counts only, no journal content,
+    // no raw uids. Readable by administrators; NEVER writable from any client
+    // (the scheduled flush writes with the service credential, which bypasses rules).
+    match /aggregates/{day} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Administrative audit ledger. Server-authored via the service credential so an
+    // administrator cannot forge, alter, or suppress entries about their own actions.
+    // Admins may read it; no client may write, update, or delete.
+    match /adminAudit/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Account lifecycle flags (suspension state surfaced to the console).
+    // Readable by administrators and by the account owner; written only by the server.
+    match /accountStatus/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow write: if false;
+    }
+
+    // =====================================================================
+    // FEATURE 8: Weekly digest surfaces
+    // =====================================================================
+    // All four are server-only. Clients reach them exclusively through
+    // /api/digest/*, which authenticates the caller and scopes every operation
+    // to their own uid. Denying direct client access keeps OAuth refresh tokens
+    // out of reach of the browser entirely -- including the token's own owner,
+    // so an XSS on this app cannot exfiltrate a Gmail grant.
+
+    match /gmailTokens/{userId} {
+      allow read, write: if false;
+    }
+
+    match /digestEnrollment/{userId} {
+      allow read, write: if false;
+    }
+
+    match /digestCounters/{userId} {
+      allow read, write: if false;
+    }
+
+    match /digestSends/{sendId} {
+      allow read, write: if false;
+    }
+
+    // =====================================================================
+    // EXTERNAL NOTIFICATIONS (Slack / Discord / Email)
+    // =====================================================================
+    // Server-only, reached exclusively through /api/notifications/*, which scopes every
+    // operation to the uid on the verified token.
+    //
+    // notificationSecrets holds Slack and Discord webhook URLs. Those URLs are bearer
+    // capabilities: anyone holding one can post into that channel indefinitely. Denying
+    // all client access means a browser compromise cannot enumerate or steal them, and
+    // the values are additionally encrypted with a Secret Manager key so the Firestore
+    // credential alone is not sufficient to read them either.
+
+    match /notificationDestinations/{docId} {
+      allow read, write: if false;
+    }
+
+    match /notificationSecrets/{docId} {
+      allow read, write: if false;
+    }
+
+    // Append-only record of what was disclosed to which third party, and when.
+    match /notificationEgress/{docId} {
+      allow read, write: if false;
+    }
+
+    match /notificationAudit/{docId} {
+      allow read, write: if false;
+    }
+
+    // =====================================================================
+    // FEATURE 10: Adversarial Self-Test
+    // =====================================================================
+    // Run records are SERVER-AUTHORED. Denying client writes is what stops a modified
+    // browser from fabricating a clean security run: the audit event written at the end
+    // is derived from this document, never from anything the client reports.
+    match /selfTestRuns/{docId} {
+      allow read, write: if false;
+    }
+
+    // =====================================================================
+    // FEATURE 11: Managed Forgetting
+    // =====================================================================
+    // The KMS-wrapped per-user data key. Denied to every client, including its owner:
+    // the wrapped DEK is useless without the KMS key, but there is no reason for a
+    // browser to hold it, and an XSS on this app must not be able to exfiltrate one.
+    //
+    // Note what is NOT here: the encrypted rehydration payload itself lives on the entry
+    // document under /users/{uid}/entries/{id}, gated on ownership like the rest of the
+    // entry. That is deliberate -- the payload is the user's own data. What protects it
+    // from everyone else is envelope encryption bound to their uid, not a separate rule.
+    match /userDataKeys/{userId} {
+      allow read, write: if false;
     }
   }
 }

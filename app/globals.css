@@ -1,54 +1,65 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./tokens.css";
 
+/**
+ * LEGACY TOKEN BRIDGE
+ *
+ * Screens built before the journal design system (admin console, digest settings,
+ * notification settings, year view, commitments) reference --color-* variables. Rather
+ * than rewriting every one of them, those names are redefined in terms of the new
+ * tokens, so the whole app inherits the palette in one move.
+ *
+ * Note what --color-accent becomes: --paper, not a hue. The new system has no general
+ * accent colour on purpose. --annotation and --system are reserved for masked data and
+ * system state respectively, and borrowing either for a generic "primary" button would
+ * destroy the property that makes them readable as a language. Emphasis is carried by
+ * contrast and position instead.
+ */
 :root {
-  /* Nightstand Palette (Default: Calm Low-Glare Dark) */
-  --color-base: #141821;
-  --color-surface: #1C212B;
-  --color-surface-elevated: #222834;
-  --color-divider: #2A303C;
-  --color-text-primary: #E9E5DD;
-  --color-text-secondary: #8D96A5;
-  --color-accent: #0EA5E9;
-  --color-accent-dim: rgba(14, 165, 233, 0.15);
-  --color-accent-gradient: linear-gradient(135deg, #2563EB 0%, #06B6D4 50%, #10B981 100%);
-  --color-alert: #C9A961;
-  --color-alert-dim: rgba(201, 169, 97, 0.15);
+  --color-base: var(--ink-base);
+  --color-surface: var(--ink-raised);
+  --color-surface-elevated: var(--ink-raised);
+  --color-divider: var(--ink-rule);
+  --color-text-primary: var(--paper);
+  --color-text-secondary: var(--paper-muted);
+
+  /* Emphasis = contrast, not hue. */
+  --color-accent: var(--paper);
+  --color-accent-dim: rgba(230, 227, 220, 0.1);
+
+  /* The old --color-alert was amber and did double duty for caution and failure.
+     It resolves to --alarm; anything that genuinely means "personal data was masked"
+     uses --annotation explicitly in the new components. */
+  --color-alert: var(--alarm-text);
+  --color-alert-dim: rgba(180, 87, 75, 0.14);
 }
 
 [data-theme="daylight"] {
-  /* Daylight Palette (Paper Calm) */
-  --color-base: #F4F5F7;
-  --color-surface: #FFFFFF;
-  --color-surface-elevated: #F9FAFB;
-  --color-divider: #E5E7EB;
-  --color-text-primary: #1F2937;
-  --color-text-secondary: #6B7280;
-  --color-accent: #0284C7;
-  --color-accent-dim: rgba(2, 132, 199, 0.12);
-  --color-accent-gradient: linear-gradient(135deg, #2563EB 0%, #06B6D4 50%, #10B981 100%);
-  --color-alert: #B58D3D;
-  --color-alert-dim: rgba(181, 141, 61, 0.12);
+  --color-accent-dim: rgba(26, 28, 32, 0.08);
+  --color-alert-dim: rgba(143, 53, 41, 0.1);
 }
 
 body {
-  background-color: var(--color-base);
-  color: var(--color-text-primary);
+  background-color: var(--ink-base);
+  color: var(--paper);
   margin: 0;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-family: var(--face-ui);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Humanist journal body reading surface */
+/* Journal reading surface. Kept as a class name for compatibility; the values now
+   come from the token file so the measure, face and leading stay in one place. */
 .journal-canvas {
-  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
-  font-size: 18px;
-  line-height: 1.75;
-  max-width: 66ch;
+  font-family: var(--face-body);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  max-width: var(--measure);
+  font-optical-sizing: auto;
 }
 
-/* Clean hairline scrollbars */
+/* Hairline scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -57,88 +68,117 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-divider);
+  background: var(--ink-rule);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  background: var(--paper-faint);
 }
 
-/* Redaction highlight token */
+/**
+ * Masked personal data. The one place --annotation is permitted.
+ * No filled background: a token in running prose should read as an annotation on the
+ * text, not as a highlighted chip pasted over it.
+ */
 .redaction-token {
-  background-color: var(--color-alert-dim);
-  color: var(--color-alert);
-  border: 1px solid rgba(201, 169, 97, 0.3);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85em;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  color: var(--annotation);
+  border-bottom: 1px dotted var(--annotation);
+  font-family: var(--face-ui);
+  font-size: 0.88em;
+  letter-spacing: -0.01em;
+  cursor: help;
 }
 
-/* Reset textarea borders completely so no box border appears */
-textarea, textarea:focus, textarea:active {
+/* The composer is text on the page; it must never render a box. */
+textarea,
+textarea:focus,
+textarea:active {
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
 }
 
-/* Subtle focus ring */
 *:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
 }
 
-/* Blue-to-Green Gradient Utility Classes */
+/**
+ * The gradient utilities below are retained as class names only so that any remaining
+ * call site keeps working. They resolve to flat fills: the design system forbids
+ * gradients, which are the most reliable signal of a generically generated interface.
+ */
 .bg-gradient-blue-green {
-  background: linear-gradient(135deg, #2563EB 0%, #06B6D4 50%, #10B981 100%);
+  background: var(--paper);
+  color: var(--ink-base);
 }
 
 .bg-gradient-blue-green:hover {
-  background: linear-gradient(135deg, #1D4ED8 0%, #0891B2 50%, #059669 100%);
+  background: var(--paper);
+  opacity: 0.9;
 }
 
 .text-gradient-blue-green {
-  background: linear-gradient(135deg, #38BDF8 0%, #2DD4BF 50%, #34D399 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  background: none;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: initial;
+  color: var(--paper);
 }
 
-/* Gemini Signature Shimmer Animation */
-@keyframes geminiShimmer {
-  0% {
-    background-position: -200% 0;
-  }
+/* Loading placeholder. A single opacity pulse, not a travelling shimmer. */
+@keyframes journalPulse {
+  0%,
   100% {
-    background-position: 200% 0;
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
   }
 }
 
 .gemini-shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--color-surface) 0%,
-    var(--color-surface-elevated) 35%,
-    var(--color-divider) 50%,
-    var(--color-surface-elevated) 65%,
-    var(--color-surface) 100%
-  );
-  background-size: 250% 100%;
-  animation: geminiShimmer 2.2s infinite ease-in-out;
+  background: var(--ink-raised);
+  animation: journalPulse 1.6s infinite var(--ease);
 }
 
-@keyframes geminiGlow {
-  0%, 100% {
-    opacity: 0.85;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.06);
-  }
-}
-
+/* Retained for compatibility; the scale/glow is gone. */
 .gemini-sparkle-glow {
-  animation: geminiGlow 3s infinite ease-in-out;
+  animation: journalPulse 3s infinite var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gemini-shimmer,
+  .gemini-sparkle-glow {
+    animation: none;
+  }
+}
+
+/**
+ * MONO → PUBLIC SANS MIGRATION
+ *
+ * The pre-existing screens use `font-mono` for nearly all interface text. The design
+ * system specifies Public Sans for the gutter, controls, rail, ledger and admin console,
+ * so rather than editing several hundred call sites, the utility is redefined to the UI
+ * face with tabular figures (which is what those call sites actually wanted: aligned
+ * numbers, not a typewriter).
+ *
+ * Genuinely monospaced content — raw payloads, hashes, HTTP responses — opts back in
+ * with `.payload-dump`.
+ */
+.font-mono {
+  font-family: var(--face-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.payload-dump,
+pre.payload-dump {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Journal prose always wins over the UI face. */
+.journal-column,
+.turn-user,
+.turn-model,
+.composer {
+  font-family: var(--face-body);
 }

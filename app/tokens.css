@@ -1,0 +1,281 @@
+/**
+ * tokens.css — the journal design system.
+ *
+ * Two hard rules this file exists to enforce:
+ *
+ *   1. --annotation appears ONLY where personal data was masked.
+ *   2. --system appears ONLY where system state is reported.
+ *
+ * Neither is ever used for emphasis, decoration, headings, or buttons that do not carry
+ * that meaning. When the reader sees amber, it always means the same thing. A palette
+ * only becomes a language if its terms are never borrowed for convenience.
+ */
+
+:root {
+  /* ---- Ground planes ------------------------------------------------------
+     Only TWO planes exist in the reading surface: the page, and the gutter
+     recessed behind it. --ink-raised is deliberately scoped to the rail, menus
+     and modals; it must never appear behind prose. See the note in §Surfaces. */
+  --ink-base: #14161b;      /* the page */
+  --ink-gutter: #101216;    /* marginalia column, recessed */
+  --ink-raised: #1b1e25;    /* rail, menus, modals — never behind prose */
+  --ink-rule: #262a33;      /* hairlines, 1px only */
+
+  /* ---- Text --------------------------------------------------------------- */
+  --paper: #e6e3dc;         /* primary text, warm not blue-white — 14.4:1 on base */
+  --paper-muted: #9aa0a6;   /* model text, metadata — 6.9:1 on base */
+  --paper-faint: #5c626b;   /* placeholders only — see --mark-rest for glyphs */
+
+  /* ---- Meaning-bearing accents -------------------------------------------- */
+  --annotation: #c8a05a;    /* masked personal data. Nothing else. 7.5:1 on base */
+  --system: #6e8f79;        /* system state, success, self-test pass. 5.1:1 */
+  --alarm: #b4574b;         /* failure, destructive. 3.9:1 — NOT for body text */
+  --alarm-text: #d8776a;    /* the same meaning at 5.6:1, for when it must be read */
+
+  /* ---- Marginalia glyphs --------------------------------------------------
+     Separate from --paper-faint. Information-bearing marks sit at 8–10px, where
+     the 3.07:1 that --paper-faint yields on the gutter is technically at the
+     WCAG 1.4.11 floor but practically unreadable. These clear it properly. */
+  --mark-rest: #79808a;     /* 4.6:1 on gutter — at-rest glyph */
+  --mark-active: #b8bec6;   /* hover / focus / filled portion */
+
+  /* ---- Focus --------------------------------------------------------------
+     Not a glowing ring. A 2px bracket in paper, offset so it never crowds text. */
+  --focus: #e6e3dc;
+
+  /* ---- Type ---------------------------------------------------------------
+     Literata carries the product: everything the user writes and everything the
+     model writes back. Public Sans is for the machinery around it. */
+  --face-body: var(--font-literata), Georgia, 'Times New Roman', serif;
+  --face-ui: var(--font-public-sans), system-ui, -apple-system, sans-serif;
+
+  /* 19px × 1.75 = 33.25px, which will not tile a ruled background cleanly.
+     Pinned to exactly 33px so the composer's baseline grid aligns to the text. */
+  --size-body: 19px;
+  --leading-body: 33px;
+  --size-model: 17px;       /* one step down; never smaller, it must stay readable */
+  --leading-model: 30px;
+  --size-ui: 13px;
+  --size-ui-lg: 14px;
+  --measure: 66ch;
+
+  /* ---- Structure ---------------------------------------------------------- */
+  --gutter-w: 64px;
+  --rail-w: 320px;
+  --radius-control: 4px;    /* controls only */
+  --radius-surface: 0;      /* the reading surface is never rounded */
+  --hairline: 1px;
+
+  /* ---- Motion -------------------------------------------------------------
+     One orchestrated moment (streaming reveal). Everything else is instant or a
+     120ms opacity change. */
+  --reveal-dur: 180ms;
+  --reveal-stagger: 40ms;
+  --ui-dur: 120ms;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* ---- Daylight -------------------------------------------------------------
+   Cool paper grey, not cream. Accents re-tuned for luminance, not merely reused:
+   the same hex on a light ground would fail contrast and change meaning. */
+[data-theme='daylight'] {
+  --ink-base: #f2f2ee;
+  --ink-gutter: #e9e9e3;
+  --ink-raised: #ffffff;
+  --ink-rule: #d5d5cd;
+
+  --paper: #1a1c20;
+  --paper-muted: #55595f;
+  --paper-faint: #85898f;
+
+  --annotation: #8a6420;
+  --system: #3f6149;
+  --alarm: #8f3529;
+  --alarm-text: #8f3529;
+
+  --mark-rest: #757a81;
+  --mark-active: #2c2f34;
+
+  --focus: #1a1c20;
+}
+
+/* =========================================================================
+   Surfaces
+   ========================================================================= */
+
+.journal-page {
+  background: var(--ink-base);
+  color: var(--paper);
+  font-family: var(--face-body);
+}
+
+/* The gutter is the ONLY recessed plane in the reading surface. The rail sits on
+   the same ground as the page, separated by a hairline — inverting the usual
+   "content floats on cards" figure/ground, which is what makes this read as a
+   page with margins rather than a dashboard with panels. */
+.journal-gutter {
+  background: var(--ink-gutter);
+  width: var(--gutter-w);
+  font-family: var(--face-ui);
+}
+
+.journal-rail {
+  background: var(--ink-base);
+  border-left: var(--hairline) solid var(--ink-rule);
+  width: var(--rail-w);
+  font-family: var(--face-ui);
+  font-size: var(--size-ui);
+}
+
+/* =========================================================================
+   The text column
+   ========================================================================= */
+
+.journal-column {
+  max-width: var(--measure);
+  font-family: var(--face-body);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  font-optical-sizing: auto;
+}
+
+/* User text sits directly on the page. No bubble, no fill, no border, no avatar. */
+.turn-user {
+  color: var(--paper);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+}
+
+/* Model text reads as annotation on your writing: indented, ruled, one step down,
+   secondary colour. The indent and rule say who is speaking — no name, no avatar. */
+.turn-model {
+  margin-left: 32px;
+  padding-left: 20px;
+  border-left: var(--hairline) solid var(--ink-rule);
+  color: var(--paper-muted);
+  font-size: var(--size-model);
+  line-height: var(--leading-model);
+}
+
+/* Turns are separated by space, never by dividers or cards. */
+.turn + .turn {
+  margin-top: 40px;
+}
+
+/* Masked spans are the one place --annotation is permitted. */
+.masked-entity {
+  color: var(--annotation);
+  border-bottom: var(--hairline) dotted var(--annotation);
+  cursor: help;
+  font-family: var(--face-ui);
+  font-size: 0.9em;
+}
+
+/* =========================================================================
+   Composer
+   ========================================================================= */
+
+.composer {
+  border: 0;
+  background: transparent;
+  color: var(--paper);
+  font-family: var(--face-body);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  width: 100%;
+  resize: none;
+  outline: none;
+}
+
+.composer::placeholder {
+  color: var(--paper-faint);
+  font-family: var(--face-body);
+  font-style: italic;
+}
+
+/* Paper revealing its rules under a pen. Tiles at exactly --leading-body, which is
+   why that value is pinned to an integer. */
+.composer-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--leading-body) - 1px),
+    var(--ink-rule) calc(var(--leading-body) - 1px),
+    var(--ink-rule) var(--leading-body)
+  );
+  background-position: 0 0.35em;
+  opacity: 0;
+  transition: opacity var(--ui-dur) var(--ease);
+}
+
+.composer-shell:focus-within .composer-ruled {
+  opacity: 0.5;
+}
+
+/* =========================================================================
+   Marginalia glyphs
+   ========================================================================= */
+
+.mark {
+  color: var(--mark-rest);
+  background: transparent;
+  border: 0;
+  padding: 4px;              /* 8px glyph inside a 16px+ hit area */
+  line-height: 0;
+  cursor: pointer;
+  transition: color var(--ui-dur) var(--ease);
+}
+
+.mark:hover,
+.mark:focus-visible {
+  color: var(--mark-active);
+}
+
+.mark[data-kind='redaction'] {
+  color: var(--annotation);  /* masked data — the meaning is fixed */
+}
+
+/* =========================================================================
+   Focus — a bracket, not a glow
+   ========================================================================= */
+
+:where(a, button, [tabindex], input, textarea, select):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: var(--radius-control);
+}
+
+/* =========================================================================
+   Motion
+   ========================================================================= */
+
+@keyframes line-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.reveal-line {
+  opacity: 0;
+  animation: line-in var(--reveal-dur) var(--ease) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal-line {
+    opacity: 1;
+    animation: none;
+  }
+  .composer-ruled {
+    transition: none;
+  }
+}

@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "cross-env NODE_OPTIONS='--max-old-space-size=8192' next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "node --import tsx --test tests/**/*.test.ts",
-    "clean": "next clean"
+    "clean": "next clean",
+    "grant-admin": "tsx scripts/grant-admin.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -33,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.8",
     "firebase-tools": "^15.0.0",

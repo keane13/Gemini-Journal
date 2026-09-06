@@ -88,3 +88,22 @@ export interface Commitment {
   lastResurfacedAt: string | null;
 }
 
+
+/**
+ * FEATURE 9: Optional per-entry location pin.
+ * Coordinates are coarsened to ~1km server-side unless the user enabled precise mode.
+ * `sharedWithModel` records whether the label was sent to Gemini unmasked, so the
+ * Egress Ledger can be reconstructed after the fact.
+ */
+export interface EntryLocation {
+  placeLabel: string;
+  lat: number | null;
+  lng: number | null;
+  precision: 'coarse' | 'precise';
+  sharedWithModel: boolean;
+}
+
+export interface LocationSettings {
+  preciseLocation: boolean;
+  locationContextForReflections: boolean;
+}

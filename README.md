@@ -40,6 +40,143 @@ If you have only 90 seconds to evaluate this architecture:
 
 ---
 
+## Expansion Features (7-9)
+
+### Feature 7 - Blind Admin Console (`/admin`)
+
+An operational console that **cannot read user entries**, and proves it.
+
+- **Roles:** `user` | `admin`, carried as a Firebase custom claim and read only from a
+  cryptographically verified ID token.
+- **Bootstrap:** add your address to `ADMIN_BOOTSTRAP_EMAILS`, then either visit `/admin`
+  and use the one-time self-grant, or run the operator script:
+  ```bash
+  npx tsx scripts/grant-admin.ts --email you@example.com
+  npx tsx scripts/grant-admin.ts --email you@example.com --check
+  npx tsx scripts/grant-admin.ts --email you@example.com --revoke
+  ```
+  Requires `GOOGLE_APPLICATION_CREDENTIALS` locally. Sign out and back in for the claim
+  to appear in your token.
+- **Shows:** daily active users, entries created, model latency p50/p95, token spend,
+  fleet-wide redaction category histogram, error rates by code, rate-limit hits - all
+  precomputed aggregates with **small-cell suppression below 5 users**.
+- **Can:** suspend an account, reinstate it, revoke sessions. Each requires a sign-in
+  within the last 5 minutes and writes an immutable audit record *before* running; if the
+  audit append fails, the action is refused.
+- **Cannot:** read, export, or search any journal content. The console header says so, and
+  the **Prove it** button live-executes a real Firestore read of another account's entries
+  using the admin's own token, displaying the verbatim `PERMISSION_DENIED` next to a
+  control probe that succeeds against the admin's own entries.
+
+### Feature 8 - Weekly Digest via Gmail
+
+Opt-in, **off by default**, found under the mail icon in the header.
+
+- **Incremental OAuth** for `gmail.send` **only**, requested separately from sign-in. A
+  grant carrying broader scopes is rejected and revoked.
+- **Sent from the user's own account to themselves.** No third-party email vendor is
+  involved at any point.
+- **Contains:** entries written, mood direction as a word (never a score), recurring theme
+  count, overdue commitments **by count only**, and deep links back into the app. No entry
+  text, no titles, no model output - structurally, because the send path is built from
+  write-time counters and never loads journal content.
+- **Live preview** in settings, rendered by the same function the scheduler calls, so what
+  you preview is what gets sent.
+- **Never triggered by mood or distress detection.** Recipients are selected purely by
+  enrollment on a fixed schedule.
+- **Scheduling:** Cloud Scheduler with OIDC auth, idempotent per `(uid, isoWeek)`.
+
+  ```bash
+  gcloud scheduler jobs create http weekly-digest       --schedule="0 9 * * MON" --time-zone="Asia/Jakarta"       --uri="https://YOUR_SERVICE_URL/api/cron/digest" --http-method=POST       --oidc-service-account-email="scheduler@${PROJECT_ID}.iam.gserviceaccount.com"       --oidc-token-audience="https://YOUR_SERVICE_URL"
+
+  gcloud scheduler jobs create http metrics-flush       --schedule="*/15 * * * *"       --uri="https://YOUR_SERVICE_URL/api/cron/aggregate" --http-method=POST       --oidc-service-account-email="scheduler@${PROJECT_ID}.iam.gserviceaccount.com"       --oidc-token-audience="https://YOUR_SERVICE_URL"
+  ```
+
+  Set `CRON_OIDC_AUDIENCE` and `CRON_SERVICE_ACCOUNT_EMAIL` to match. If either is unset,
+  the endpoints refuse every request rather than defaulting open.
+
+### Feature 9 - Location Context
+
+- Optional per-entry location pin. Reverse geocoding runs **server-side** with a
+  **separate, API-restricted Maps key** from Secret Manager - no map key is ever shipped
+  to the browser.
+- **Coarse by default (~1km).** The precise value is discarded server-side before the
+  geocoder is even called, so the exact position is not disclosed upstream either. Precise
+  coordinates are a per-user setting, off by default.
+- Location is **redacted to `[LOCATION_n]` before Gemini egress** unless the user
+  explicitly enables location context for reflections - and it surfaces in the **Egress
+  Ledger** like any other masked entity. Masking applies even when privacy mode is `off`,
+  because location sharing is a separate consent from PII heuristics.
+- **Year View** gains a place filter, shown only when entries actually carry locations.
+
+> Deployment requirement: restrict `MAPS_SERVER_API_KEY` to the Geocoding API and to your
+> server's egress IPs. If a browser-side map is ever added, it must use a *third*,
+> referrer-locked key - never this one.
+
+
+### Feature 11 - Managed Forgetting
+
+A journal that deliberately forgets. The inverse of what every other AI product does.
+
+**The inversion:** the canonical stored body is the **redacted** text — always, on every
+write path, server and client. The personal details live in a separate payload holding the
+placeholder map, encrypted under a Cloud KMS-wrapped per-user data key. Past the retention
+window a scheduled job destroys that payload. The entry stays fully readable and fully
+searchable; only the details are gone:
+
+> Dia minta aku follow up ke `[EMAIL_1]`
+
+Because the plaintext was never the canonical form, forgetting is not a deletion that has
+to chase copies. There is nothing to chase.
+
+- **Window:** 30 / 90 (default) / 365 / never. "Off" is not offered — below 30 days the
+  details would vanish before you had read your own reflection back, which is data loss
+  rather than a privacy control.
+- **Irreversible by design.** The plaintext map is never stored anywhere else, so there is
+  no archive, no backup copy, and no administrator who can recover it.
+- **Shortening destroys immediately** and requires typing `FORGET THE DETAILS NOW`.
+  Lengthening needs no confirmation, because nothing is lost.
+- **Retention state is shown plainly** under the entry title ("Details expire in 34 days" /
+  "Details forgotten on 12 Jun 2026") and as a hollow gutter mark that fills as the window
+  elapses.
+- **Forgetting costs no retrieval quality.** Recall and Patterns already operate on the
+  redacted text, so the search corpus is identical before and after.
+
+```bash
+# Cloud KMS key (see .env.example for the full IAM grant)
+gcloud kms keyrings create journal --location=global
+gcloud kms keys create rehydration --location=global --keyring=journal     --purpose=encryption
+gcloud kms keys add-iam-policy-binding rehydration --location=global     --keyring=journal     --member="serviceAccount:journal-app-sa@${PROJECT_ID}.iam.gserviceaccount.com"     --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
+# The nightly forgetting job
+gcloud scheduler jobs create http managed-forgetting     --schedule="0 3 * * *" --time-zone="Asia/Jakarta"     --uri="https://YOUR_SERVICE_URL/api/cron/forget" --http-method=POST     --oidc-service-account-email="scheduler@${PROJECT_ID}.iam.gserviceaccount.com"     --oidc-token-audience="https://YOUR_SERVICE_URL"
+```
+
+> If Cloud KMS is not configured, entries are still written with the redacted body as
+> canonical but **no rehydration payload is stored at all** — the details are simply never
+> recoverable. The application never falls back to storing the placeholder map unencrypted.
+
+> **Migration note:** entries written before this feature still hold plaintext in the
+> client-side `interactions` store and are not reachable by the forgetting job. Managed
+> forgetting applies to entries created from this version onward. See `TRUST_LEDGER.md`
+> caveat C11.
+
+---
+
+## Trust Documentation
+
+| Document | What it is |
+|---|---|
+| [`TRUST_LEDGER.md`](./TRUST_LEDGER.md) | Every trust claim, its enforcement mechanism, and **how to verify it yourself**. Includes a frank caveats section covering known gaps. |
+| [`THREAT_MODEL.md`](./THREAT_MODEL.md) | STRIDE matrix (15 threats), expansion trust boundaries, and known gaps in the document itself. |
+| [`security_spec.md`](./security_spec.md) | Data invariants and the "Dirty Dozen" malicious payloads. |
+
+**Read `TRUST_LEDGER.md` §4 first if you are evaluating this system.** It records a
+critical authentication bypass found and fixed during the expansion work, and it lists
+which documented protections are not currently implemented.
+
+---
+
 ## Local Setup & Development
 
 ### 1. Install Dependencies

@@ -133,3 +133,53 @@ export async function listDocuments(
   }
 }
 
+
+/**
+ * Raw, non-throwing Firestore GET that preserves the HTTP status and error body.
+ *
+ * Used by the admin console's "Prove it" affordance (Feature 7), which must surface the
+ * genuine PERMISSION_DENIED that Firestore rules return -- not a synthesized message.
+ * Callers pass whichever bearer token they want the read attributed to.
+ */
+export async function rawGetDocument(
+  path: string,
+  bearerToken: string
+): Promise<{ ok: boolean; status: number; body: string; url: string }> {
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  const url = `${BASE_URL}/${cleanPath}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      cache: 'no-store',
+    });
+    return { ok: res.ok, status: res.status, body: await res.text(), url };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      body: error instanceof Error ? error.message : 'network error',
+      url,
+    };
+  }
+}
+
+/**
+ * Fetches a single document and decodes its fields. Returns null when absent or denied.
+ */
+export async function getDocument(
+  path: string,
+  bearerToken: string
+): Promise<Record<string, any> | null> {
+  const res = await rawGetDocument(path, bearerToken);
+  if (!res.ok) return null;
+  try {
+    const doc = JSON.parse(res.body);
+    const fields: Record<string, any> = {};
+    for (const [k, v] of Object.entries(doc.fields || {})) {
+      fields[k] = fromFirestoreValue(v);
+    }
+    return fields;
+  } catch {
+    return null;
+  }
+}

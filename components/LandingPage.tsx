@@ -11,15 +11,44 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, loading, error }) => {
   return (
-    <div className="min-h-screen bg-[var(--color-base)] text-[var(--color-text-primary)] flex flex-col justify-between selection:bg-[var(--color-accent-dim)] selection:text-[var(--color-accent)]">
+    <div className="relative min-h-screen bg-black text-white flex flex-col justify-between selection:bg-white/20 selection:text-white overflow-hidden">
+      {/* Background Image and Overlay */}
+      <div 
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat scale-105"
+        style={{ 
+          backgroundImage: 'url(/journal-bg.jpg)',
+          animation: 'bgZoomOut 10s ease-out forwards'
+        }}
+      />
+      <div className="absolute inset-0 z-0 bg-black/75 backdrop-blur-[2px]" />
+
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes bgZoomOut {
+          from { transform: scale(1.1); }
+          to { transform: scale(1); }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-up {
+          animation: fadeUp 1s ease-out forwards;
+          opacity: 0;
+        }
+        .delay-100 { animation-delay: 100ms; }
+        .delay-200 { animation-delay: 200ms; }
+        .delay-300 { animation-delay: 300ms; }
+        .delay-500 { animation-delay: 500ms; }
+      `}} />
+
       {/* Top Borderline Chrome */}
-      <header className="border-b border-[var(--color-divider)] bg-[var(--color-surface)]">
+      <header className="relative z-10 border-b border-white/10 bg-black/30 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="font-serif text-lg tracking-tight font-medium text-[var(--color-text-primary)]">
+            <span className="font-serif text-lg tracking-tight font-medium text-white">
               Personal Gemini Journal
             </span>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-[var(--color-accent-dim)] text-[var(--color-accent)] font-mono">
+            <span className="text-[11px] px-2 py-0.5 rounded bg-white/10 text-white font-mono">
               Nightstand v2.0
             </span>
           </div>
@@ -28,7 +57,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, loading, err
             id="nav-signin-btn"
             onClick={onSignIn}
             disabled={loading}
-            className="px-4 py-1.5 text-xs font-mono text-white bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 hover:opacity-90 rounded-md transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-blue-500/20"
+            className="px-4 py-1.5 text-xs font-mono text-black bg-white hover:bg-gray-200 rounded-md transition-all disabled:opacity-50 cursor-pointer"
           >
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Sign In'}
           </button>
@@ -36,11 +65,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, loading, err
       </header>
 
       {/* Main Reading & Call-to-Action Surface */}
-      <main className="flex-1 max-w-3xl mx-auto px-6 py-20 flex flex-col items-center text-center justify-center space-y-8">
+      <main className="relative z-10 flex-1 max-w-3xl mx-auto px-6 py-20 flex flex-col items-center text-center justify-center space-y-8">
         {error && (
           <div
             id="auth-error-banner"
-            className="w-full p-4 bg-[var(--color-alert-dim)] border border-[var(--color-alert)] rounded-md text-left text-xs font-mono text-[var(--color-alert)] space-y-1"
+            className="w-full p-4 bg-red-950/50 border border-red-500 rounded-md text-left text-xs font-mono text-red-400 space-y-1 animate-fade-up"
           >
             <p className="font-medium">Authentication Notice</p>
             <p>{error}</p>
@@ -50,29 +79,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, loading, err
           </div>
         )}
 
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-surface)] text-[var(--color-accent)] text-xs font-mono border border-[var(--color-divider)]">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 text-gray-300 text-xs font-mono border border-white/10 backdrop-blur-md animate-fade-up">
           <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Privacy Shield &bull; Zero Browser Model Calls &bull; Firestore UID Isolated</span>
+          <span>No model call is ever made from your browser.</span>
         </div>
 
-        <h1 className="font-serif text-4xl sm:text-5xl font-normal tracking-tight text-[var(--color-text-primary)] leading-tight max-w-2xl">
+        <h1 className="font-serif text-4xl sm:text-5xl font-normal tracking-tight text-white leading-tight max-w-2xl animate-fade-up delay-100 drop-shadow-lg">
           A quiet writing surface for honest introspection.
         </h1>
 
-        <p className="text-base sm:text-lg text-[var(--color-text-secondary)] font-serif italic max-w-xl leading-relaxed">
+        <p className="text-base sm:text-lg text-gray-300 font-serif italic max-w-xl leading-relaxed animate-fade-up delay-200">
           Write multi-turn reflections with Gemini 3.6 Flash. Sensitive data is deterministically redacted before leaving your device, and all memories are isolated strictly to your authentic identity.
         </p>
 
         {/* Primary CTA */}
-        <div className="pt-2">
+        <div className="pt-2 animate-fade-up delay-300">
           <button
             id="hero-google-signin-btn"
             onClick={onSignIn}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-3 px-6 py-3 bg-[var(--color-surface)] hover:bg-[var(--color-surface-elevated)] border border-[var(--color-divider)] hover:border-[var(--color-accent)] text-[var(--color-text-primary)] font-mono text-xs rounded-md transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
+            className="inline-flex items-center justify-center gap-3 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/20 hover:border-white/40 text-white font-mono text-xs rounded-md transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer backdrop-blur-sm"
           >
             {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[var(--color-accent)]" />
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
             ) : (
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
@@ -98,24 +127,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, loading, err
         </div>
 
         {/* Minimal Architectural Axioms */}
-        <div className="pt-12 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left w-full">
-          <div className="p-4 rounded-md bg-[var(--color-surface)] border border-[var(--color-divider)] space-y-2">
-            <h3 className="font-mono text-xs font-medium text-[var(--color-accent)]">Egress Redaction</h3>
+        <div className="pt-12 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left w-full animate-fade-up delay-500">
+          <div className="p-4 rounded-md bg-black/40 border border-white/10 backdrop-blur-sm space-y-2 hover:bg-black/60 transition-colors">
+            <h3 className="font-mono text-xs font-medium text-gray-200">Egress Redaction</h3>
             <p className="text-xs text-[var(--color-text-secondary)] font-serif leading-relaxed">
               Phones, Luhn-verified cards, Indonesian NIK/NPWP, and emails are masked before upstream egress.
             </p>
           </div>
 
-          <div className="p-4 rounded-md bg-[var(--color-surface)] border border-[var(--color-divider)] space-y-2">
-            <h3 className="font-mono text-xs font-medium text-[var(--color-accent)]">Grounded Recall</h3>
-            <p className="text-xs text-[var(--color-text-secondary)] font-serif leading-relaxed">
+          <div className="p-4 rounded-md bg-black/40 border border-white/10 backdrop-blur-sm space-y-2 hover:bg-black/60 transition-colors">
+            <h3 className="font-mono text-xs font-medium text-gray-200">Grounded Recall</h3>
+            <p className="text-xs text-gray-400 font-serif leading-relaxed">
               &ldquo;Ask your past self&rdquo; searches embedded memory chunks with deep-link citations.
             </p>
           </div>
 
-          <div className="p-4 rounded-md bg-[var(--color-surface)] border border-[var(--color-divider)] space-y-2">
-            <h3 className="font-mono text-xs font-medium text-[var(--color-accent)]">Data Sovereignty</h3>
-            <p className="text-xs text-[var(--color-text-secondary)] font-serif leading-relaxed">
+          <div className="p-4 rounded-md bg-black/40 border border-white/10 backdrop-blur-sm space-y-2 hover:bg-black/60 transition-colors">
+            <h3 className="font-mono text-xs font-medium text-gray-200">Data Sovereignty</h3>
+            <p className="text-xs text-gray-400 font-serif leading-relaxed">
               One-click full JSON and Markdown bundle export. Complete cascading hard deletion on command.
             </p>
           </div>
@@ -123,8 +152,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, loading, err
       </main>
 
       {/* Subtle Footer */}
-      <footer className="border-t border-[var(--color-divider)] py-4 text-center text-[11px] font-mono text-[var(--color-text-secondary)]">
-        <span>Grounded Architecture &bull; Next.js 15 App Router &bull; Google Cloud Firestore &bull; Gemini Flash</span>
+      <footer className="relative z-10 border-t border-white/10 bg-black/30 backdrop-blur-md py-4 text-center text-[11px] font-mono text-gray-400">
+        <span>Your entries stay yours. Nothing leaves this server unredacted.</span>
       </footer>
     </div>
   );

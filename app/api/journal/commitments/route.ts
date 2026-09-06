@@ -11,6 +11,7 @@ import { authenticateRequest } from '@/lib/server/auth';
 import { listDocuments, persistDocument } from '@/lib/server/firestore-rest';
 import { isCommitmentDueForResurface } from '@/lib/server/commitments';
 import { Commitment } from '@/types/journal';
+import { recordOpenCommitmentDueDates } from '@/lib/server/digest-counters';
 
 export async function GET(req: NextRequest) {
   let user;
@@ -43,6 +44,21 @@ export async function GET(req: NextRequest) {
       resurfacedCount: typeof doc.resurfacedCount === 'number' ? doc.resurfacedCount : 0,
       lastResurfacedAt: doc.lastResurfacedAt ?? null,
     }));
+
+    // Feature 8: mirror open-commitment DUE TIMESTAMPS (never text) into the digest
+    // counters, so the weekly digest can report an overdue count without reading
+    // commitment content. Fire-and-forget.
+    void recordOpenCommitmentDueDates(
+      user.uid,
+      commitments
+        .filter((c) => c.status === 'open')
+        .map((c) => {
+          // No stated due date: fall back to the 14-day resurface horizon, matching
+          // isCommitmentDueForResurface so the digest and the UI agree on "overdue".
+          const due = c.dueHint ? Date.parse(c.dueHint) : Date.parse(c.statedAt) + 14 * 86400000;
+          return Number.isFinite(due) ? due : Date.now() + 14 * 86400000;
+        })
+    );
 
     if (resurfaceOnly) {
       // Filter open commitments past their dueHint or older than 14 days

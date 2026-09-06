@@ -15,7 +15,7 @@
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { JournalInteraction } from '@/types/journal';
-import { ChevronLeft, ChevronRight, X, Calendar, BookOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Calendar, BookOpen, MapPin } from 'lucide-react';
 
 interface YearViewProps {
   interactions: JournalInteraction[];
@@ -56,14 +56,35 @@ export const YearView: React.FC<YearViewProps> = ({
   const [currentYear, setCurrentYear] = useState<number>(initialYear);
   const [focusedDateStr, setFocusedDateStr] = useState<string>(() => formatIsoDate(new Date()));
   const [hoveredDay, setHoveredDay] = useState<DayData | null>(null);
+  // FEATURE 9: optional place filter. 'all' shows every entry; otherwise only entries
+  // pinned to the selected place label are counted into the grid.
+  const [placeFilter, setPlaceFilter] = useState<string>('all');
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // FEATURE 9: the set of place labels present in the data. Derived from entries the
+  // user already has -- no extra fetch, and no map key in the client.
+  const availablePlaces = useMemo(() => {
+    const places = new Set<string>();
+    for (const item of interactions) {
+      const label = (item as any)?.location?.placeLabel;
+      if (typeof label === 'string' && label.trim()) places.add(label.trim());
+    }
+    return [...places].sort((a, b) => a.localeCompare(b));
+  }, [interactions]);
+
+  const visibleInteractions = useMemo(() => {
+    if (placeFilter === 'all') return interactions;
+    return interactions.filter(
+      (item) => ((item as any)?.location?.placeLabel ?? '').trim() === placeFilter
+    );
+  }, [interactions, placeFilter]);
 
   // Group existing entries by YYYY-MM-DD
   const dayDataMap = useMemo(() => {
     const map = new Map<string, DayData>();
 
-    for (const item of interactions) {
+    for (const item of visibleInteractions) {
       if (!item.createdAt) continue;
       const d = new Date(item.createdAt);
       if (isNaN(d.getTime())) continue;
@@ -113,49 +134,51 @@ export const YearView: React.FC<YearViewProps> = ({
     }
 
     return map;
-  }, [interactions]);
+  }, [visibleInteractions]);
 
   // Compute color & opacity styling for a day cell
   const getCellVisuals = useCallback((count: number, avgMood: number | null) => {
     if (count === 0) {
       return {
-        bg: 'bg-[var(--color-surface)]/30 border border-[var(--color-divider)]/40',
+        bg: 'border border-[var(--ink-rule)]',
+        bgStyle: 'transparent',
         titleSuffix: 'No entries',
       };
     }
 
-    // Determine hue based on mood:
-    // avgMood in [-1.0, 1.0]
-    let colorClass = 'bg-amber-500/60 border-amber-400/50 text-white';
+    // Mood is encoded as INK INTENSITY, not hue.
+    //
+    // The palette reserves --annotation for masked personal data and --system for system
+    // state; spending amber on "optimistic" and indigo on "reflective" would break the
+    // one property that makes those colours readable as a language. So the year grid
+    // varies the value of a single ink instead, exactly as the marginalia mood arc varies
+    // its fill fraction rather than its colour.
+    //
+    // Mood is also never conveyed by tone alone: every cell carries a text title, and the
+    // hover card states the figure.
     let titleSuffix = `${count} reflection${count > 1 ? 's' : ''}`;
+
+    // Density from entry count, shade from mood. Both resolve to --paper.
+    const density = count > 1 ? 1 : 0.82;
+    let moodWeight = 0.55;
 
     if (avgMood !== null) {
       if (avgMood >= 0.25) {
-        // Optimistic / warm
-        colorClass = count > 1
-          ? 'bg-amber-500 text-black font-bold shadow-sm'
-          : 'bg-amber-500/75 text-black font-semibold';
-        titleSuffix += ` (Mood: +${avgMood.toFixed(2)})`;
+        moodWeight = 0.95;
+        titleSuffix += ` (mood: lighter, ${avgMood.toFixed(2)})`;
       } else if (avgMood <= -0.25) {
-        // Deep reflective / contemplative
-        colorClass = count > 1
-          ? 'bg-indigo-500 text-white font-bold shadow-sm'
-          : 'bg-indigo-500/75 text-white font-semibold';
-        titleSuffix += ` (Mood: ${avgMood.toFixed(2)})`;
+        moodWeight = 0.35;
+        titleSuffix += ` (mood: heavier, ${avgMood.toFixed(2)})`;
       } else {
-        // Balanced
-        colorClass = count > 1
-          ? 'bg-gradient-to-br from-blue-500 to-emerald-400 text-white font-bold shadow-sm'
-          : 'bg-gradient-to-br from-blue-500/85 to-emerald-400/85 text-white font-semibold';
-        titleSuffix += ` (Mood: balanced)`;
+        moodWeight = 0.65;
+        titleSuffix += ' (mood: level)';
       }
-    } else {
-      colorClass = count > 1
-        ? 'bg-gradient-to-br from-blue-500 to-emerald-400 text-white font-bold shadow-sm'
-        : 'bg-gradient-to-br from-blue-500/85 to-emerald-400/85 text-white font-medium';
     }
 
-    return { bg: colorClass, titleSuffix };
+    const colorClass = `text-[var(--ink-base)] ${count > 1 ? 'font-semibold' : 'font-medium'}`;
+    const bgStyle = `rgba(230, 227, 220, ${(density * moodWeight).toFixed(2)})`;
+
+    return { bg: colorClass, bgStyle, titleSuffix };
   }, []);
 
   // Keyboard navigation handler (ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Enter)
@@ -256,6 +279,27 @@ export const YearView: React.FC<YearViewProps> = ({
           </div>
         </div>
 
+        {/* FEATURE 9: Place filter. Hidden entirely when no entry carries a location,
+            so the control never advertises a feature the user has not used. */}
+        {availablePlaces.length > 0 && (
+          <label className="flex items-center gap-2 text-xs font-mono text-[var(--color-text-secondary)]">
+            <MapPin className="h-3.5 w-3.5" />
+            <select
+              value={placeFilter}
+              onChange={(e) => setPlaceFilter(e.target.value)}
+              aria-label="Filter entries by place"
+              className="bg-[var(--color-surface)] border border-[var(--color-divider)] rounded px-2 py-1 text-xs font-mono text-[var(--color-text-primary)]"
+            >
+              <option value="all">All places</option>
+              {availablePlaces.map((place) => (
+                <option key={place} value={place}>
+                  {place}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         {/* Year Navigation Controls */}
         <div className="flex items-center gap-2">
           <button
@@ -293,7 +337,7 @@ export const YearView: React.FC<YearViewProps> = ({
       {/* Dynamic Inspector Strip (Hover/Focus Details) */}
       <div
         id="year-view-inspector"
-        className="my-4 rounded-lg border border-[var(--color-divider)] bg-[var(--color-surface)] p-3 shadow-sm transition-all"
+        className="my-4 rounded-lg border border-[var(--color-divider)] bg-[var(--color-surface)] p-3 transition-all"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
@@ -368,7 +412,7 @@ export const YearView: React.FC<YearViewProps> = ({
             <div
               key={monthName}
               id={`month-${monthIndex}`}
-              className="rounded-lg border-0 bg-[var(--color-surface)]/80 shadow-sm p-3"
+              className="rounded-lg border-0 bg-[var(--color-surface)]/80 p-3"
             >
               <h3 className="mb-2 font-serif text-xs font-semibold text-[var(--color-text-primary)] tracking-wide">
                 {monthName}
@@ -430,13 +474,10 @@ export const YearView: React.FC<YearViewProps> = ({
                         setFocusedDateStr(dateStr);
                         setHoveredDay(dayInfo);
                       }}
-                      className={`h-6 w-6 rounded text-[10px] flex items-center justify-center transition-all ${
+                      style={{ backgroundColor: visuals.bgStyle }}
+                      className={`h-6 w-6 rounded-[2px] text-[10px] flex items-center justify-center transition-opacity duration-[120ms] ${
                         visuals.bg
-                      } ${
-                        isFocused
-                          ? 'ring-2 ring-[var(--color-accent)] scale-110 z-10'
-                          : 'hover:scale-105'
-                      }`}
+                      } ${isFocused ? 'ring-2 ring-[var(--focus)] z-10' : 'hover:opacity-80'}`}
                       title={`${monthName} ${dayNum}: ${visuals.titleSuffix}`}
                     >
                       {dayNum}
@@ -452,22 +493,32 @@ export const YearView: React.FC<YearViewProps> = ({
       {/* Legend & Navigation Guide */}
       <div className="mt-auto border-t border-[var(--color-divider)] pt-4 flex flex-wrap items-center justify-between gap-4 text-[11px] text-[var(--color-text-secondary)]">
         <div className="flex items-center gap-3">
-          <span>Cadence Tint:</span>
+          {/* Mood reads as ink intensity, not hue: one ink, four values. */}
+          <span>Ink density:</span>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded bg-amber-500" />
-            <span>Optimistic</span>
+            <span
+              className="inline-block h-3 w-3 rounded-[2px]"
+              style={{ backgroundColor: 'rgba(230,227,220,0.95)' }}
+            />
+            <span>Lighter</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded bg-gradient-to-br from-blue-500 to-emerald-400" />
-            <span>Balanced</span>
+            <span
+              className="inline-block h-3 w-3 rounded-[2px]"
+              style={{ backgroundColor: 'rgba(230,227,220,0.65)' }}
+            />
+            <span>Level</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded bg-indigo-500" />
-            <span>Contemplative</span>
+            <span
+              className="inline-block h-3 w-3 rounded-[2px]"
+              style={{ backgroundColor: 'rgba(230,227,220,0.35)' }}
+            />
+            <span>Heavier</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded border border-[var(--color-divider)] bg-[var(--color-surface)]/30" />
-            <span>Rest Day</span>
+            <span className="inline-block h-3 w-3 rounded-[2px] border border-[var(--ink-rule)]" />
+            <span>No entries</span>
           </div>
         </div>
 

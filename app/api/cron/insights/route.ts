@@ -18,6 +18,7 @@ import { getGeminiApiKey } from '@/lib/server/secrets';
 import { MODEL_ID } from '@/lib/config';
 import { runPrivacyShield } from '@/lib/server/redaction';
 import { persistDocument } from '@/lib/server/firestore-rest';
+import { recordThemeCount } from '@/lib/server/digest-counters';
 import firebaseConfig from '@/firebase-applet-config.json';
 import { createAuditRecord } from '@/lib/server/audit';
 
@@ -67,10 +68,12 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Fetch user's recent entries (past 14 days)
-    const entriesUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${user.uid}/entries?pageSize=20`;
+    const entriesUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${user.uid}/interactions?pageSize=20`;
     const res = await fetch(entriesUrl, { headers: { Authorization: `Bearer ${token}` } });
 
     if (!res.ok) {
+      const errText = await res.text();
+      console.error('Firestore API error:', errText);
       return NextResponse.json({ error: 'Failed to retrieve entries.' }, { status: 500 });
     }
 
@@ -130,6 +133,10 @@ Return ONLY valid JSON.`;
     const periodId = `${new Date().getFullYear()}-W${Math.ceil(new Date().getDate() / 7)}`;
     if (token) {
       await persistDocument(`users/${user.uid}/insights/${periodId}`, validated as any, token);
+
+      // Feature 8: record only HOW MANY themes surfaced, never the theme names, so the
+      // weekly digest can report a count without the digest path reading insights.
+      void recordThemeCount(user.uid, validated.recurringThemes.length);
       const audit = createAuditRecord(req, 'GENERATE_INSIGHTS', 'SUCCESS');
       await persistDocument(`users/${user.uid}/audit/audit_${Date.now()}`, audit as any, token);
     }
