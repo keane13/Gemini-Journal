@@ -85,7 +85,9 @@ export async function POST(req: NextRequest) {
       return { ok: r.ok, status: r.status, body: await r.text(), collection };
     }
 
+    const attempts: Array<{ collection: string; status: number; ok: boolean }> = [];
     let res = await loadFrom('entries');
+    attempts.push({ collection: 'entries', status: res.status, ok: res.ok });
     let docs: any[] = [];
 
     if (res.ok) {
@@ -99,6 +101,7 @@ export async function POST(req: NextRequest) {
     // Nothing in the authoritative store: try the legacy one before giving up.
     if (docs.length === 0) {
       const legacy = await loadFrom('interactions');
+      attempts.push({ collection: 'interactions', status: legacy.status, ok: legacy.ok });
       if (legacy.ok) {
         try {
           docs = JSON.parse(legacy.body).documents ?? [];
@@ -133,19 +136,31 @@ export async function POST(req: NextRequest) {
         detail = errText.slice(0, 300);
       }
 
-      const hint =
-        status === 'PERMISSION_DENIED'
-          ? 'Firestore refused the read. The security rules for /users/{uid}/interactions ' +
-            'may not be deployed yet — run: firebase deploy --only firestore:rules'
-          : status === 'NOT_FOUND'
-            ? 'The Firestore database or collection was not found. Check the projectId and ' +
-              'databaseId in firebase-applet-config.json.'
-            : 'See the dev-server console for the full Firestore response.';
+      /**
+       * Name every collection that was tried and what each returned.
+       *
+       * The previous message hardcoded "/users/{uid}/interactions" even after the route
+       * started reading `entries` first. It stayed plausible while being wrong, which
+       * cost real debugging time. An error that names its own inputs cannot mislead
+       * that way, and it also makes it obvious whether a deploy actually landed.
+       */
+      const tried = attempts
+        .map((a) => `${a.collection}=HTTP ${a.status}`)
+        .join(', ');
+
+      const allDenied = attempts.every((a) => a.status === 403);
+      const hint = allDenied
+        ? 'Every collection was refused, which points at the security rules rather than ' +
+          'at any one collection. Confirm the rules are PUBLISHED on database ' +
+          `"${databaseId}" — a named database, not (default).`
+        : 'See the dev-server console for the full Firestore response.';
 
       return NextResponse.json(
         {
           error: 'FIRESTORE_READ_FAILED',
-          message: `Could not read your entries (HTTP ${res.status}${status ? ` ${status}` : ''}). ${hint}`,
+          message: `Could not read your entries. Tried: ${tried}. ${hint}`,
+          attempts,
+          buildMarker: 'insights-v2-entries-first',
           firestoreStatus: status,
           firestoreMessage: detail,
         },
