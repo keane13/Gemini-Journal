@@ -296,7 +296,7 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'private_key_id field', re: /"private_key_id"\s*:/g },
   { name: 'Google OAuth client secret', re: /GOCSPX-[0-9A-Za-z_\-]{20,}/g },
   /**
-   * AI Studio / Secret Manager handle, e.g. "AQ.Ab8RN6K…".
+   * AI Studio / Secret Manager handle, shaped "AQ." followed by a long opaque token.
    *
    * Added after this scanner missed a real one: a Cloud Run service export sitting in the
    * working tree carried a live GEMINI_API_KEY in this format, and every pattern above
