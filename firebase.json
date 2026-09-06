@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "database": "ai-studio-geminireflection-0add71a4-31f0-4aa3-8c6e-eab71027b3ba",
+    "rules": "firestore.rules"
+  }
+}

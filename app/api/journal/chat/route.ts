@@ -280,7 +280,12 @@ Return ONLY valid JSON.`;
      * window's reach. And Managed Forgetting only holds if the recall corpus is redacted
      * too -- otherwise forgetting an entry would leave its details searchable.
      */
-    const chunks = chunkJournalText(redactionResult.redactedText, entryId);
+    //
+    // A self-test call skips this entirely. It persists nothing, so an embedding would be
+    // a wasted upstream call -- and worse, the fixture text (a test credit-card number,
+    // an injection payload) would land in the user's real recall corpus and stay
+    // searchable. A security probe must not pollute the thing it is probing.
+    const chunks = selfTest ? [] : chunkJournalText(redactionResult.redactedText, entryId);
     for (const chunk of chunks) {
       try {
         chunk.embedding = await generateEmbedding(chunk.text);

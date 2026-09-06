@@ -295,6 +295,16 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'PEM private key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
   { name: 'private_key_id field', re: /"private_key_id"\s*:/g },
   { name: 'Google OAuth client secret', re: /GOCSPX-[0-9A-Za-z_\-]{20,}/g },
+  /**
+   * AI Studio / Secret Manager handle, e.g. "AQ.Ab8RN6K…".
+   *
+   * Added after this scanner missed a real one: a Cloud Run service export sitting in the
+   * working tree carried a live GEMINI_API_KEY in this format, and every pattern above
+   * looked straight past it because it is not shaped like `AIza…`. A scanner that only
+   * knows the formats you thought of is a scanner that reassures you while missing the
+   * leak that actually happens.
+   */
+  { name: 'AI Studio / Secret Manager handle', re: /AQ\.[A-Za-z0-9_\-]{30,}/g },
 ];
 
 /**

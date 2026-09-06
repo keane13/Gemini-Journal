@@ -74,7 +74,43 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       const errText = await res.text();
       console.error('Firestore API error:', errText);
-      return NextResponse.json({ error: 'Failed to retrieve entries.' }, { status: 500 });
+
+      /**
+       * Surface what Firestore actually said.
+       *
+       * "Failed to retrieve entries." told the user nothing and buried the real cause in
+       * a server console they cannot see. This is the caller's own data and their own
+       * error, so there is nothing to protect by hiding it -- and a diagnosable message
+       * is worth far more than a tidy one.
+       */
+      let status: string | null = null;
+      let detail: string | null = null;
+      try {
+        const parsed = JSON.parse(errText);
+        status = parsed?.error?.status ?? null;
+        detail = parsed?.error?.message ?? null;
+      } catch {
+        detail = errText.slice(0, 300);
+      }
+
+      const hint =
+        status === 'PERMISSION_DENIED'
+          ? 'Firestore refused the read. The security rules for /users/{uid}/interactions ' +
+            'may not be deployed yet — run: firebase deploy --only firestore:rules'
+          : status === 'NOT_FOUND'
+            ? 'The Firestore database or collection was not found. Check the projectId and ' +
+              'databaseId in firebase-applet-config.json.'
+            : 'See the dev-server console for the full Firestore response.';
+
+      return NextResponse.json(
+        {
+          error: 'FIRESTORE_READ_FAILED',
+          message: `Could not read your entries (HTTP ${res.status}${status ? ` ${status}` : ''}). ${hint}`,
+          firestoreStatus: status,
+          firestoreMessage: detail,
+        },
+        { status: 502 }
+      );
     }
 
     const data = await res.json();

@@ -109,6 +109,37 @@ const STATUS_WORD: Record<CheckStatus, string> = {
   skipped: 'skipped',
 };
 
+/**
+ * Reads a response without ever throwing an opaque parse error.
+ *
+ * `res.json()` on an empty body produces "Unexpected end of JSON input", which tells the
+ * reader nothing about what actually failed. On a page whose whole purpose is showing
+ * people what really happened, that is the worst possible error message. This surfaces
+ * the status and whatever the body actually contained instead.
+ */
+async function readJson(res: Response): Promise<{ ok: boolean; data: any; error?: string }> {
+  const text = await res.text().catch(() => '');
+
+  if (!text.trim()) {
+    return {
+      ok: false,
+      data: null,
+      error: `The server returned an empty response (HTTP ${res.status}). Check the dev-server console for the underlying error.`,
+    };
+  }
+
+  try {
+    const data = JSON.parse(text);
+    return { ok: res.ok, data, error: res.ok ? undefined : data?.message || data?.error };
+  } catch {
+    return {
+      ok: false,
+      data: null,
+      error: `HTTP ${res.status}: ${text.slice(0, 300)}`,
+    };
+  }
+}
+
 export const SelfTestRunner: React.FC<{ user: User }> = ({ user }) => {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [statuses, setStatuses] = useState<Record<string, CheckStatus>>({});
@@ -118,6 +149,8 @@ export const SelfTestRunner: React.FC<{ user: User }> = ({ user }) => {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [finished, setFinished] = useState(false);
+  // False when the run could not be recorded server-side. Reported, never hidden.
+  const [persisted, setPersisted] = useState(true);
 
   const authHeaders = useCallback(async () => {
     const token = await user.getIdToken();
@@ -129,12 +162,12 @@ export const SelfTestRunner: React.FC<{ user: User }> = ({ user }) => {
     (async () => {
       try {
         const res = await fetch('/api/security/self-test', { headers: await authHeaders() });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body?.message || 'Failed to load the check manifest.');
+        const { ok, data, error } = await readJson(res);
+        if (!ok) throw new Error(error || 'Failed to load the check manifest.');
         if (!cancelled) {
-          setManifest(body);
+          setManifest(data);
           setStatuses(
-            Object.fromEntries(body.checks.map((c: CheckDefinition) => [c.id, 'pending']))
+            Object.fromEntries(data.checks.map((c: CheckDefinition) => [c.id, 'pending']))
           );
         }
       } catch (err) {
@@ -162,9 +195,10 @@ export const SelfTestRunner: React.FC<{ user: User }> = ({ user }) => {
         headers,
         body: JSON.stringify({ action: 'start' }),
       });
-      const startBody = await startRes.json();
-      if (!startRes.ok) throw new Error(startBody?.message || 'Could not start the run.');
-      const runId: string = startBody.runId;
+      const start = await readJson(startRes);
+      if (!start.ok) throw new Error(start.error || 'Could not start the run.');
+      const runId: string = start.data.runId;
+      if (start.data.persisted === false) setPersisted(false);
 
       // Sequential on purpose: RATE_LIMIT exhausts the quota, so order matters.
       for (const check of manifest.checks) {
@@ -175,24 +209,25 @@ export const SelfTestRunner: React.FC<{ user: User }> = ({ user }) => {
           headers,
           body: JSON.stringify({ action: 'run', runId, checkId: check.id }),
         });
-        const body = await res.json();
+        const { ok, data, error } = await readJson(res);
 
-        if (!res.ok) {
+        if (!ok || !data?.result) {
           setStatuses((s) => ({ ...s, [check.id]: 'error' }));
           setResults((r) => ({
             ...r,
             [check.id]: {
               id: check.id,
               status: 'error',
-              observed: body?.message || 'The runner refused this check.',
+              observed: error || 'The runner refused this check.',
               elapsedMs: 0,
-              raw: JSON.stringify(body, null, 2),
+              raw: data ? JSON.stringify(data, null, 2) : (error ?? ''),
             },
           }));
           continue;
         }
 
-        const result: CheckResult = body.result;
+        if (data.persisted === false) setPersisted(false);
+        const result: CheckResult = data.result;
         setResults((r) => ({ ...r, [check.id]: result }));
         setStatuses((s) => ({ ...s, [check.id]: result.status }));
       }
@@ -335,6 +370,15 @@ export const SelfTestRunner: React.FC<{ user: User }> = ({ user }) => {
       ) : null}
 
       <p className="text-[13px] text-[var(--paper-muted)]">{manifest.note}</p>
+
+      {!persisted ? (
+        <p className="rounded-[4px] border border-[var(--alarm)] px-3 py-2 text-[13px] text-[var(--alarm-text)]">
+          <strong>This run was not recorded server-side.</strong> Firestore persistence is
+          unavailable, so results are held in memory on a single instance. Every check below
+          still ran for real against the live application — but the tamper-evident record
+          that normally makes these verdicts server-authored is missing for this run.
+        </p>
+      ) : null}
 
       {error ? <p className="text-[13px] text-[var(--alarm-text)]">{error}</p> : null}
 

@@ -10,3 +10,8 @@ coverage/
 service.yaml
 tsconfig.tsbuildinfo
 .claude/
+
+# Cloud Run service export. Contains resolved env values including GEMINI_API_KEY
+# in plaintext — must never reach a public repository.
+current_service.yaml
+*service*.yaml

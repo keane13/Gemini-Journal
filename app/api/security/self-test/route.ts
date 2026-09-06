@@ -71,22 +71,80 @@ async function requireFreshUser(req: NextRequest): Promise<VerifiedAuthUser> {
 
 const runPath = (uid: string, runId: string) => `selfTestRuns/${uid}_${runId}`;
 
+/**
+ * Fallback run store, used only when Firestore persistence is unavailable — typically a
+ * local run with no service credential configured.
+ *
+ * This is a genuine weakening and is reported as such: `persisted: false` travels back to
+ * the client, which says so on screen. Server-authored verdicts are what stop a modified
+ * browser fabricating a clean run, and an in-memory store on a single instance is a
+ * weaker version of that guarantee. The checks themselves remain completely real; only
+ * the tamper-evident record of them is downgraded.
+ *
+ * Silently falling back would be the worst option: the page would look identical while
+ * quietly no longer meaning what it says.
+ */
+/**
+ * Held on `globalThis`, not in a module-level `const`.
+ *
+ * This is not defensive style for its own sake — it fixes an observed failure. In dev,
+ * Next.js re-evaluates route modules when the module graph is invalidated, and the first
+ * check that calls /api/journal/chat triggers compilation of that route and its shared
+ * dependencies. Module-level state was wiped mid-run, so every check after the first
+ * model call returned "Run not found" in 0ms: the checks never executed at all.
+ *
+ * A run must outlive module re-evaluation, so it lives somewhere module re-evaluation
+ * cannot reach.
+ */
+const selfTestStore = globalThis as unknown as {
+  __selfTestRuns?: Map<string, SelfTestRun>;
+  __selfTestPersistence?: boolean;
+};
+
+selfTestStore.__selfTestRuns ??= new Map<string, SelfTestRun>();
+selfTestStore.__selfTestPersistence ??= true;
+
+const memoryRuns = selfTestStore.__selfTestRuns;
+
+function persistenceOk(): boolean {
+  return selfTestStore.__selfTestPersistence !== false;
+}
+
+function markPersistenceUnavailable(): void {
+  selfTestStore.__selfTestPersistence = false;
+}
+
 async function loadRun(uid: string, runId: string): Promise<SelfTestRun | null> {
-  const token = await getGoogleAccessToken();
-  const doc = await getDocument(runPath(uid, runId), token);
-  if (!doc) return null;
-  const run = doc as unknown as SelfTestRun;
-  // Defence in depth: never return another account's run, whatever path was constructed.
-  return run.uid === uid ? run : null;
+  try {
+    const token = await getGoogleAccessToken();
+    const doc = await getDocument(runPath(uid, runId), token);
+    if (doc) {
+      const run = doc as unknown as SelfTestRun;
+      // Defence in depth: never return another account's run, whatever path was built.
+      if (run.uid === uid) return run;
+    }
+  } catch {
+    markPersistenceUnavailable();
+  }
+  return memoryRuns.get(`${uid}_${runId}`) ?? null;
 }
 
 async function saveRun(run: SelfTestRun): Promise<void> {
-  const token = await getGoogleAccessToken();
-  await persistDocument(
-    runPath(run.uid, run.runId),
-    run as unknown as Record<string, unknown>,
-    token
-  );
+  // The in-memory copy is always kept, so a Firestore failure mid-run cannot lose the
+  // results the user is watching accumulate.
+  memoryRuns.set(`${run.uid}_${run.runId}`, run);
+
+  try {
+    const token = await getGoogleAccessToken();
+    const ok = await persistDocument(
+      runPath(run.uid, run.runId),
+      run as unknown as Record<string, unknown>,
+      token
+    );
+    if (!ok) markPersistenceUnavailable();
+  } catch {
+    markPersistenceUnavailable();
+  }
 }
 
 function tally(results: CheckResult[]) {
@@ -136,6 +194,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const action = body?.action;
 
+  /**
+   * Everything below runs inside one try/catch.
+   *
+   * Without it, a throw from the run store escaped the handler, Next.js returned a 500
+   * with an EMPTY body, and the browser's `res.json()` failed with
+   * "Unexpected end of JSON input" -- an error that says nothing about what went wrong.
+   * A route whose client always parses JSON must always produce JSON, including when it
+   * fails.
+   */
+  try {
   // ---- start ------------------------------------------------------------
   if (action === 'start') {
     if (!withinRunBudget(user.uid)) {
@@ -159,7 +227,11 @@ export async function POST(req: NextRequest) {
     };
     await saveRun(run);
 
-    return NextResponse.json({ runId: run.runId, checks: CHECKS.map((c) => c.id) });
+    return NextResponse.json({
+      runId: run.runId,
+      checks: CHECKS.map((c) => c.id),
+      persisted: persistenceOk(),
+    });
   }
 
   // ---- run one check ----------------------------------------------------
@@ -172,8 +244,25 @@ export async function POST(req: NextRequest) {
       return bad(`Unknown check: ${String(checkId)}.`, 'INVALID_REQUEST', 400);
     }
 
-    const run = await loadRun(user.uid, runId);
-    if (!run) return bad('Run not found.', 'NOT_FOUND', 404);
+    /**
+     * A missing run record must never stop the checks running.
+     *
+     * The record exists to make verdicts tamper-evident; the checks are what actually
+     * prove anything. Refusing to run because the bookkeeping was lost gets that
+     * backwards -- it withholds the evidence in order to protect the receipt.
+     */
+    const run =
+      (await loadRun(user.uid, runId)) ??
+      ({
+        runId,
+        uid: user.uid,
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        results: [],
+        passed: 0,
+        failed: 0,
+        skipped: 0,
+      } satisfies SelfTestRun);
 
     // The attack happens here, against the live application.
     const result = await runCheck(checkId, { user, appUrl: appUrlFrom(req) });
@@ -182,7 +271,7 @@ export async function POST(req: NextRequest) {
     const counts = tally(results);
     await saveRun({ ...run, results, ...counts });
 
-    return NextResponse.json({ result });
+    return NextResponse.json({ result, persisted: persistenceOk() });
   }
 
   // ---- finalize ---------------------------------------------------------
@@ -191,7 +280,13 @@ export async function POST(req: NextRequest) {
     if (!runId) return bad('runId is required.', 'INVALID_REQUEST', 400);
 
     const run = await loadRun(user.uid, runId);
-    if (!run) return bad('Run not found.', 'NOT_FOUND', 404);
+    if (!run) {
+      return NextResponse.json({
+        persisted: persistenceOk(),
+        summary: { passed: 0, failed: 0, skipped: 0, total: 0 },
+        note: 'The run record was not retained, so no audit event was written.',
+      });
+    }
 
     const counts = tally(run.results ?? []);
     const finished: SelfTestRun = {
@@ -226,6 +321,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       run: finished,
+      persisted: persistenceOk(),
       summary: {
         passed: counts.passed,
         failed: counts.failed,
@@ -236,4 +332,12 @@ export async function POST(req: NextRequest) {
   }
 
   return bad("action must be one of 'start', 'run', 'finalize'.", 'INVALID_REQUEST', 400);
+  } catch (err) {
+    console.error('Self-test runner failed:', err);
+    return bad(
+      err instanceof Error ? err.message : 'The self-test runner failed unexpectedly.',
+      'RUNNER_ERROR',
+      500
+    );
+  }
 }
